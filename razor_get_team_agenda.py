@@ -8,7 +8,7 @@ nh = NotionHelper(NOTION_TOKEN)
 
 def get_team_agenda():
     # Fetch the data
-    work = nh.get_data_source_pages_as_dataframe()
+    work = nh.get_data_source_pages_as_dataframe('203fdfd6-8a97-80a1-861a-000b951a59bf')
     current = work[work['Discussed'] == False]
     # Select columns and rename them to match your lowercase/snake_case requirements
     df_subset = current[['Discussed', 'Agenda Item', 'Brief Description', 'Person']].copy()

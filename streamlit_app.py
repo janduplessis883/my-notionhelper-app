@@ -28,7 +28,7 @@ if not st.session_state.authenticated:
     passcode_input = st.text_input("Passcode", type="password", key="passcode_input")
     
     if st.button("Submit", type="primary"):
-        if passcode_input == st.secrets["PASSCODE"]:
+        if passcode_input == st.secrets["passcode"]:
             st.session_state.authenticated = True
             st.success("Access granted!")
             st.rerun()
