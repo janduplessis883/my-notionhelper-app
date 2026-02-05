@@ -1,0 +1,8 @@
+streamlit
+pandas
+notionhelper
+notion-blockify
+matplotlib
+seaborn
+resend
+groq
