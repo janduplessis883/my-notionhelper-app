@@ -4,7 +4,7 @@ from notion_blockify import Blockizer
 import streamlit as st
 from groq import Groq
 
-from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda
+from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda, run_github_trending_workflow
 from razor_db_create_new_page import render_notion_page_creator
 
 # Initialize Groq client
@@ -59,7 +59,7 @@ def ask_groq(prompt: str, model: str = "openai/gpt-oss-120b"):
 
 with st.sidebar:
     st.title(":material/settings: Settings")
-    PAGE_SELECTION = ["Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "HR", "Write to URL"]
+    PAGE_SELECTION = ["Python-script-runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Write to URL"]
     pages = st.selectbox("Page Selectioon", PAGE_SELECTION, index=0)
     st.divider()
     MODEL_OPTIONS = ["moonshotai/kimi-k2-instruct-0905", "meta-llama/llama-4-maverick-17b-128e-instruct", "qwen/qwen3-32b", "openai/gpt-oss-120b", "groq/compound-mini", "groq/compound"]
@@ -119,4 +119,20 @@ elif pages == "Write to URL":
     render_notion_page_creator(model=model)
 
 
-
+elif pages == "Python-script-runner":
+    st.caption("Python-script-runner") 
+    c1, c2 = st.columns(2)
+    with c1:
+        trending_github = st.button("Trending GitHub Repos", icon=":material/deployed_code:", width='stretch')
+        if trending_github:
+            with st.spinner("Fetching trending GitHub repositories...", show_time=True):
+                try:
+                    repos_added, duplicates_removed = run_github_trending_workflow()
+                    st.success(f":material/check_circle: Successfully added {repos_added} trending Python repositories!")
+                    if duplicates_removed > 0:
+                        st.info(f":material/delete: Removed {duplicates_removed} duplicate entries")
+            
+                except Exception as e:
+                    st.error(f":material/error: Error running GitHub trending workflow: {e}")
+    with c2:
+        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')

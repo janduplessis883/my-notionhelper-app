@@ -115,3 +115,116 @@ def run_partners_agenda(date_of_meeting: str, email_list: list, preview_agenda: 
 def run_team_agenda(date_of_meeting: str, email_list: list, preview_agenda: bool = False):
     """Run Team agenda - wrapper for run_agenda."""
     return run_agenda(team_db_id, date_of_meeting, email_list, preview_agenda, "Team Meeting")
+
+
+def get_github_trending_page():
+    """
+    Fetch trending Python repositories from GitHub and add them to Notion database.
+    
+    Returns:
+        int: Number of repositories processed
+    """
+    import gtrending
+    from datetime import datetime
+    
+    # Fetch trending python repositories for the day
+    repos = gtrending.fetch_repos(language="python", spoken_language_code="en", since="daily")
+    
+    processed_count = 0
+    for repo in repos[:20]:
+        owner = repo['fullname'].split('/')[0]
+        # Reliable way to get the icon (GitHub redirects this to the real image)
+        icon_url = f"https://github.com/{owner}.png"
+        
+        print(f"Stars today: +{repo['currentPeriodStars']}")
+        print(f"Total Stars: {repo['stars']}")
+        print(f"URL: {repo['url']}")
+        print("-" * 20)
+
+        # Ensure todaytime is in ISO 8601 format (YYYY-MM-DD)
+        todaytime = datetime.now().date().isoformat()
+
+        properties = {
+            'Repo': {
+                'title': [
+                    {
+                        'text': {
+                            'content': repo['fullname']
+                        }
+                    }
+                ]
+            },
+            'URL': {
+                'url': repo['url']
+            },
+            'Stars Today': {
+                'number': int(repo['currentPeriodStars'])
+            },
+            'Total Stars': {
+                'number': int(repo['stars'])
+            },
+            'Date': {
+                'date': {
+                    'start': todaytime
+                }
+            },
+            'Icon': {
+                'files': [
+                    {
+                        'type': 'external',
+                        'name': 'GitHub Icon',
+                        'external': {
+                            'url': icon_url
+                        }
+                    }
+                ]
+            }
+        }
+        nh.new_page_to_data_source('2f4fdfd6-8a97-805b-a6e9-000b8149b31f', page_properties=properties)
+        print("✅")
+        processed_count += 1
+    
+    return processed_count
+
+
+def delete_duplicate_pages():
+    """
+    Find and delete duplicate repository entries in the Notion database.
+    
+    Returns:
+        list: List of page IDs that were deleted
+    """
+    data = nh.get_data_source_pages_as_dataframe('2f4fdfd6-8a97-805b-a6e9-000b8149b31f')
+    data['Date'] = pd.to_datetime(data['Date'], format='%Y-%m-%d')
+    data.sort_values(by='Date', ascending=False, inplace=True)
+    duplicate_ids = data.loc[data.duplicated(subset=['Repo'], keep='first'), 'notion_page_id'].tolist()
+    return duplicate_ids
+
+
+def run_github_trending_workflow():
+    """
+    Complete workflow: Fetch trending GitHub repos and clean up duplicates.
+    
+    Returns:
+        tuple: (repos_added, duplicates_removed)
+    """
+    print("🚀 Starting GitHub Trending workflow...")
+    
+    # Step 1: Fetch and add trending repos
+    repos_added = get_github_trending_page()
+    print(f"\n✅ Added {repos_added} repositories")
+    
+    # Step 2: Remove duplicates
+    print("\n🔍 Loading DataFrame and checking for duplicates...")
+    duplicate_ids = delete_duplicate_pages()
+    
+    duplicates_removed = 0
+    for dup in duplicate_ids:
+        outcome = nh.move_page_to_trash(dup)
+        print(f"❌ Moved to trash - page_id: {dup}")
+        duplicates_removed += 1
+    
+    print(f"\n✅ Removed {duplicates_removed} duplicate entries")
+    print("🎉 GitHub Trending workflow completed!")
+    
+    return repos_added, duplicates_removed
