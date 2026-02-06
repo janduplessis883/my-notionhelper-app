@@ -39,7 +39,7 @@ if not st.session_state.authenticated:
 
 # Main app content (only shown if authenticated)
 st.header("<my-notionhelper-app>")
-st.logo("images/logo.png", size="medium")
+st.logo("images/notion.png", size="medium")
 # Simple function to get a response from Groq
 def ask_groq(prompt: str, model: str = "openai/gpt-oss-120b"):
     chat_completion = client.chat.completions.create(
