@@ -4,7 +4,7 @@ from notion_blockify import Blockizer
 import streamlit as st
 from groq import Groq
 
-from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda, run_github_trending_workflow
+from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda, run_github_trending_workflow, show_tasks
 from razor_db_create_new_page import render_notion_page_creator
 
 # Initialize Groq client
@@ -105,6 +105,7 @@ elif pages == "Team Agenda":
 elif pages == "Tasks":
     st.caption("Tasks")
 
+    st.dataframe(show_tasks())
 
 
 elif pages == "Calendar":
@@ -135,4 +136,8 @@ elif pages == "Python-script-runner":
                 except Exception as e:
                     st.error(f":material/error: Error running GitHub trending workflow: {e}")
     with c2:
+        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
+        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
+        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
+        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
         st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')

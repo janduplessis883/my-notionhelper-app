@@ -44,7 +44,7 @@ def get_partners_agenda(subject = "Partners' Meeting Agenda"):
     body = template.replace('{{SUBJECT}}', subject)
     body_content = ""
     for item in result:
-        body_content += f"<h3>{item['agenda_item']}</h3>"
+        body_content += f"<h2>{item['agenda_item']}</h2>"
         body_content += f"<p>{item['brief_description']}</p>"
         body_content += f"<p>Person: <b>{item['person']}</b></p><br>"
     body = body.replace('{{BODY}}', body_content)

@@ -8,6 +8,7 @@ notion = st.secrets["NOTION_TOKEN"]
 resend_api = st.secrets["RESEND_API_KEY"]
 partners_db_id = st.secrets["PARTNERS_AGENDA_ID"]
 team_db_id = st.secrets["TEAM_AGENDA_ID"]
+tasks_db_id = st.secrets["TASKS_ID"]
 nh = NotionHelper(notion)
 
 import os, requests, json, sys
@@ -58,7 +59,7 @@ def get_agenda(database_id: str, subject: str = "Meeting Agenda"):
     body = template.replace('{{SUBJECT}}', subject)
     body_content = ""
     for item in result:
-        body_content += f"<h3>{item['agenda_item']}</h3>"
+        body_content += f"<h2>{item['agenda_item']}</h2>"
         body_content += f"<p>{item['brief_description']}</p>"
         body_content += f"<p>Person: <b>{item['person']}</b></p><br>"
     body = body.replace('{{BODY}}', body_content)
@@ -114,7 +115,7 @@ def run_partners_agenda(date_of_meeting: str, email_list: list, preview_agenda: 
 
 def run_team_agenda(date_of_meeting: str, email_list: list, preview_agenda: bool = False):
     """Run Team agenda - wrapper for run_agenda."""
-    return run_agenda(team_db_id, date_of_meeting, email_list, preview_agenda, "Team Meeting")
+    return run_agenda(team_db_id, date_of_meeting, email_list, preview_agenda, "SMW Team Meeting")
 
 
 def get_github_trending_page():
@@ -228,3 +229,12 @@ def run_github_trending_workflow():
     print("🎉 GitHub Trending workflow completed!")
     
     return repos_added, duplicates_removed
+
+
+def show_tasks():
+    tasks = nh.get_data_source_pages_as_dataframe(tasks_db_id)
+    f_tasks = tasks[['Date','Status','Priority','Task','Formula', 'notion_page_id']].copy()
+    f_tasks['Date'] = pd.to_datetime(f_tasks['Date'], format='ISO8601')
+    not_done = f_tasks[f_tasks['Status'] != 'Done']
+    
+    return not_done
