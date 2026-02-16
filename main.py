@@ -61,7 +61,7 @@ def get_agenda(database_id: str, subject: str = "Meeting Agenda"):
     for item in result:
         body_content += f"<h3>{item['agenda_item']}</h3>"
         body_content += f"<p>{item['brief_description']}</p>"
-        body_content += f"<p><img width=\"20\" height=\"20\" src=\"https://img.icons8.com/forma-thin/24/person-male.png\" alt=\"person-male\"/> <b>{item['person']}</b></p><br>"
+        body_content += f"<p><img width=\"18\" height=\"18\" src=\"https://img.icons8.com/forma-thin/24/person-male.png\" alt=\"person-male\"/> <b>{item['person']}</b></p><br>"
     body = body.replace('{{BODY}}', body_content)
 
     return subject, body
