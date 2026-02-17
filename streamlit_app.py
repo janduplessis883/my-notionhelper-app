@@ -103,10 +103,48 @@ elif pages == "Team Agenda":
 
 
 elif pages == "Tasks":
-    st.caption("Tasks")
-
-    st.dataframe(show_tasks())
-
+    st.caption("Tasks - Summarize my To-Do list with LLM")
+    if 'tasks' not in st.session_state:
+        st.session_state['tasks'] = show_tasks()
+        
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        quick = st.button('Quick Wins', width='stretch', icon=":material/bolt:", type='primary')
+        top_five = st.button("5 Quick Tasks", width='stretch', icon=":material/counter_5:", type='primary')
+        
+    with col2:
+        all = st.button("All - Order of Execution", width='stretch', icon=":material/automation:")
+        urgent = st.button("All - Order of Urgency", width='stretch', icon=":material/bomb:")
+        
+    prompt = None
+    if quick:
+        prompt = f"""Review my TODO list and select 2 items that I can complete in 15 min each, don't use tables in your response.
+        Here is my todo list:
+        {st.session_state['tasks']}
+        """
+    elif top_five:
+        prompt = f"""Review my TODO list and select 5 tasks that I can complete in 30 min, don't use tables in your response.
+        Here is my todo list:
+        {st.session_state['tasks']}
+        """
+    elif all:
+        prompt = f"""Review my TODO list and list all my task in a logical order to complete them in, don't use tables in your response.
+        Here is my todo list:
+        {st.session_state['tasks']}
+        """
+    elif urgent:
+        prompt = f"""Review my TODO list and any URENT tasks, don't use tables in your response.
+        Here is my todo list:
+        {st.session_state['tasks']}
+        """
+    else:
+        st.stop()
+        
+    with st.spinner("LLM doing it's thing...", show_time=True):
+        response = ask_groq(prompt)
+        with st.expander("LLM Response", icon=":material/robot_2:", expanded=True):
+            st.markdown(response)
 
 elif pages == "Calendar":
     st.caption("Calendar")
@@ -137,7 +175,4 @@ elif pages == "Python-script-runner":
                     st.error(f":material/error: Error running GitHub trending workflow: {e}")
     with c2:
         st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
-        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
-        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
-        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
-        st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
+   

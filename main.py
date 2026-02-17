@@ -236,5 +236,5 @@ def show_tasks():
     f_tasks = tasks[['Date','Status','Priority','Task','Formula', 'notion_page_id']].copy()
     f_tasks['Date'] = pd.to_datetime(f_tasks['Date'], format='ISO8601')
     not_done = f_tasks[f_tasks['Status'] != 'Done']
-    
-    return not_done
+    llm_format = not_done.to_dict('records')
+    return llm_format
