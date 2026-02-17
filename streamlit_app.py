@@ -145,6 +145,8 @@ elif pages == "Tasks":
         response = ask_groq(prompt)
         with st.expander("LLM Response", icon=":material/robot_2:", expanded=True):
             st.markdown(response)
+        with st.expander("Raw markdown code", icon=":material/code:", expanded=False):
+            st.code(response)
 
 elif pages == "Calendar":
     st.caption("Calendar")
