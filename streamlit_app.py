@@ -146,7 +146,7 @@ elif pages == "Tasks":
         with st.expander("LLM Response", icon=":material/robot_2:", expanded=True):
             st.markdown(response)
         with st.expander("Raw markdown code", icon=":material/code:", expanded=False):
-            st.code(response)
+            st.code(response, wrap_lines=True, language='markdown')
 
 elif pages == "Calendar":
     st.caption("Calendar")
