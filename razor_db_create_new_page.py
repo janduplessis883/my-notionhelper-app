@@ -2,7 +2,7 @@
 Streamlit-compatible module for creating Notion pages or appending content.
 """
 import re
-from typing import Optional
+from typing import Optional, Any
 import streamlit as st
 from notionhelper import NotionHelper
 from notion_blockify import Blockizer
@@ -72,35 +72,223 @@ def extract_page_id_from_url(notion_url: str) -> Optional[str]:
     return None
 
 
-# Valid Notion block types
 VALID_BLOCK_TYPES = {
-    'paragraph', 'heading_1', 'heading_2', 'heading_3', 'heading_4',
-    'bulleted_list_item', 'numbered_list_item', 'to_do', 'toggle',
-    'code', 'quote', 'callout', 'divider', 'table_of_contents',
-    'breadcrumb', 'equation', 'embed', 'bookmark', 'image', 'video',
-    'pdf', 'file', 'audio', 'link_to_page', 'table', 'table_row',
-    'column_list', 'column', 'synced_block', 'template', 'ai_block'
+    'paragraph', 'heading_1', 'heading_2', 'heading_3', 'bulleted_list_item',
+    'numbered_list_item', 'to_do', 'toggle', 'code', 'quote', 'callout',
+    'divider', 'table_of_contents', 'breadcrumb', 'equation', 'embed',
+    'bookmark', 'image', 'video', 'pdf', 'file', 'audio', 'link_to_page',
+    'table', 'table_row', 'column_list', 'column', 'synced_block', 'template'
 }
+
+
+TEXT_BLOCK_TYPES = {
+    'paragraph', 'heading_1', 'heading_2', 'heading_3', 'bulleted_list_item',
+    'numbered_list_item', 'quote', 'callout', 'toggle'
+}
+
+MAX_RICH_TEXT_CONTENT_LENGTH = 2000
+
+
+def _utf16_units(value: str) -> int:
+    """Return UTF-16 code units count (how Notion validates text length)."""
+    return len(value.encode("utf-16-le")) // 2
+
+
+def _chunk_text(value: str, chunk_size: int = MAX_RICH_TEXT_CONTENT_LENGTH) -> list[str]:
+    """Split text into Notion-safe rich_text chunks by UTF-16 code units."""
+    if not value:
+        return [""]
+
+    chunks: list[str] = []
+    current_chars: list[str] = []
+    current_units = 0
+
+    for ch in value:
+        ch_units = _utf16_units(ch)
+        if current_chars and current_units + ch_units > chunk_size:
+            chunks.append("".join(current_chars))
+            current_chars = [ch]
+            current_units = ch_units
+        else:
+            current_chars.append(ch)
+            current_units += ch_units
+
+    if current_chars:
+        chunks.append("".join(current_chars))
+
+    return chunks
+
+
+def _normalize_rich_text(items: Any) -> list[dict]:
+    """Normalize rich_text items to Notion's request schema."""
+    if not isinstance(items, list):
+        return []
+
+    normalized = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        text = item.get("text")
+        if not isinstance(text, dict):
+            text = {}
+
+        content = text.get("content")
+        if content is None:
+            content = item.get("plain_text")
+        if content is None:
+            continue
+
+        content_str = str(content)
+        link_url = None
+        link = text.get("link")
+        if isinstance(link, dict):
+            link_url = link.get("url")
+        if not link_url:
+            link_url = item.get("href")
+
+        annotations = item.get("annotations")
+        clean_annotations = None
+        if isinstance(annotations, dict):
+            clean_annotations = {
+                "bold": bool(annotations.get("bold", False)),
+                "italic": bool(annotations.get("italic", False)),
+                "strikethrough": bool(annotations.get("strikethrough", False)),
+                "underline": bool(annotations.get("underline", False)),
+                "code": bool(annotations.get("code", False)),
+                "color": str(annotations.get("color", "default")),
+            }
+
+        for chunk in _chunk_text(content_str):
+            clean_text = {"content": chunk}
+            if link_url:
+                clean_text["link"] = {"url": link_url}
+
+            clean_item = {
+                "type": "text",
+                "text": clean_text,
+            }
+            if clean_annotations:
+                clean_item["annotations"] = clean_annotations
+
+            normalized.append(clean_item)
+
+    return normalized
+
+
+def _sanitize_notion_block(block: dict) -> Optional[dict]:
+    """Convert a block to a Notion-compatible request payload."""
+    if not isinstance(block, dict):
+        return None
+
+    block_type = block.get("type")
+    if not isinstance(block_type, str):
+        return None
+    original_block_type = block_type
+
+    # Notion only supports heading_1..heading_3.
+    if block_type.startswith("heading_"):
+        try:
+            level = int(block_type.split("_", maxsplit=1)[1])
+            if level > 3:
+                block_type = "heading_3"
+        except (ValueError, IndexError):
+            return None
+
+    if block_type not in VALID_BLOCK_TYPES:
+        return None
+
+    payload = block.get(original_block_type)
+    if not isinstance(payload, dict):
+        payload = {}
+
+    clean_payload: dict[str, Any] = {}
+
+    if block_type in TEXT_BLOCK_TYPES:
+        clean_payload["rich_text"] = _normalize_rich_text(payload.get("rich_text", []))
+
+    if block_type == "to_do":
+        clean_payload["rich_text"] = _normalize_rich_text(payload.get("rich_text", []))
+        clean_payload["checked"] = bool(payload.get("checked", False))
+
+    if block_type == "code":
+        clean_payload["language"] = str(payload.get("language", "plain text"))
+        clean_payload["rich_text"] = _normalize_rich_text(payload.get("rich_text", []))
+
+    if block_type == "equation":
+        expression = payload.get("expression")
+        if expression is None:
+            return None
+        clean_payload["expression"] = str(expression)
+
+    if block_type in {"embed", "bookmark", "video", "pdf", "audio"}:
+        url = payload.get("url")
+        if not url:
+            return None
+        clean_payload["url"] = str(url)
+
+    if block_type == "image":
+        image_external = payload.get("external")
+        if isinstance(image_external, dict) and image_external.get("url"):
+            clean_payload["external"] = {"url": str(image_external["url"])}
+        elif payload.get("url"):
+            clean_payload["external"] = {"url": str(payload["url"])}
+        else:
+            return None
+
+    if block_type == "table":
+        clean_payload["table_width"] = int(payload.get("table_width", 1))
+        clean_payload["has_column_header"] = bool(payload.get("has_column_header", False))
+        clean_payload["has_row_header"] = bool(payload.get("has_row_header", False))
+        children = payload.get("children", [])
+        clean_children = filter_valid_blocks(children)
+        if clean_children:
+            clean_payload["children"] = clean_children
+
+    if block_type == "table_row":
+        cells = payload.get("cells")
+        if not isinstance(cells, list):
+            return None
+        clean_cells = []
+        for cell in cells:
+            clean_cells.append(_normalize_rich_text(cell))
+        clean_payload["cells"] = clean_cells
+
+    children = payload.get("children")
+    if isinstance(children, list) and block_type not in {"table", "table_row"}:
+        clean_children = filter_valid_blocks(children)
+        if clean_children:
+            clean_payload["children"] = clean_children
+
+    # Block types with empty payload are valid if explicitly allowed by Notion.
+    if block_type in {"divider", "table_of_contents", "breadcrumb"} and not clean_payload:
+        clean_payload = {}
+
+    if block_type not in {"divider", "table_of_contents", "breadcrumb"} and not clean_payload:
+        return None
+
+    return {
+        "object": "block",
+        "type": block_type,
+        block_type: clean_payload,
+    }
 
 
 def filter_valid_blocks(blocks: list) -> list:
     """
-    Filter out invalid or malformed blocks from the Blockizer output.
+    Normalize and filter malformed blocks from the Blockizer output.
 
     Args:
         blocks: List of Notion block dictionaries
 
     Returns:
-        Filtered list with only valid blocks
+        List of sanitized block dictionaries accepted by Notion
     """
     valid_blocks = []
     for block in blocks:
-        if not isinstance(block, dict):
-            continue
-        # Check if block has at least one valid block type key
-        has_valid_type = any(key in VALID_BLOCK_TYPES for key in block.keys())
-        if has_valid_type:
-            valid_blocks.append(block)
+        clean_block = _sanitize_notion_block(block)
+        if clean_block:
+            valid_blocks.append(clean_block)
     return valid_blocks
 
 
