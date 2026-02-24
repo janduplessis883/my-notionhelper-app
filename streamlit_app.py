@@ -41,7 +41,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # Main app content (only shown if authenticated)
-st.header("<my-notionhelper-app>")
+st.image("images/notion-logo.png")
 st.logo("images/notion.png", size="medium")
 # Simple function to get a response from Groq
 def ask_groq(prompt: str, model: str = "openai/gpt-oss-120b"):
@@ -100,7 +100,7 @@ def save_task_summary_to_notion(summary_markdown: str, summary_title: str) -> st
 
 with st.sidebar:
     st.title(":material/settings: Settings")
-    PAGE_SELECTION = ["Python-script-runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Write to URL"]
+    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Write to URL"]
     pages = st.selectbox("Page Selectioon", PAGE_SELECTION, index=0)
     st.divider()
     MODEL_OPTIONS = ["moonshotai/kimi-k2-instruct-0905", "meta-llama/llama-4-maverick-17b-128e-instruct", "qwen/qwen3-32b", "openai/gpt-oss-120b", "groq/compound-mini", "groq/compound"]
@@ -113,8 +113,8 @@ if pages == "Partners' Agenda":
     st.caption("Partners' Agenda")
 
     meeting_date = st.date_input("Select Meeting Date")
-    email_list = st.multiselect("Select Email Recipients", options=['jan.duplessis@nhs.net', 'asteeden@nhs.net', 'jenny.bedford@nhs.net', 'shuman.hussein@nhs.net'])
-    preview_agenda = st.checkbox("Preview Agenda Before Sending")
+    email_list = st.multiselect("Select Email Recipients", options=['jan.duplessis@nhs.net', 'asteeden@nhs.net', 'jenny.bedford@nhs.net', 'shuman.hussein@nhs.net'], default=['jan.duplessis@nhs.net'])
+    preview_agenda = st.checkbox("Preview Agenda Before Sending", value=True)
     if preview_agenda:
         button_text = "Generate & Preview Agenda"
     else:
@@ -130,8 +130,8 @@ elif pages == "Team Agenda":
     st.caption("Team Agenda")
 
     meeting_date = st.date_input("Select Meeting Date", key="team_meeting_date")
-    email_list = st.multiselect("Select Email Recipients", options=['jan.duplessis@nhs.net', 'asteeden@nhs.net', 'jenny.bedford@nhs.net', 'shuman.hussein@nhs.net'], key="team_email_list")
-    preview_agenda = st.checkbox("Preview Agenda Before Sending", key="team_preview")
+    email_list = st.multiselect("Select Email Recipients", options=['jan.duplessis@nhs.net', 'asteeden@nhs.net', 'jenny.bedford@nhs.net', 'shuman.hussein@nhs.net'], key="team_email_list", default=['jan.duplessis@nhs.net'])
+    preview_agenda = st.checkbox("Preview Agenda Before Sending", key="team_preview", value=True)
     if preview_agenda:
         button_text = "Generate & Preview Agenda"
     else:
@@ -284,7 +284,7 @@ elif pages == "Write to URL":
     render_notion_page_creator(model=model)
 
 
-elif pages == "Python-script-runner":
+elif pages == "Python Script Runner":
     st.caption("Python-script-runner")
     c1, c2 = st.columns(2)
     with c1:

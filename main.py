@@ -1,8 +1,9 @@
 import pandas as pd
-import streamlit as st 
+import streamlit as st
 from notionhelper import NotionHelper
 import json
 import os
+import time
 
 notion = st.secrets["NOTION_TOKEN"]
 resend_api = st.secrets["RESEND_API_KEY"]
@@ -31,11 +32,11 @@ def send_email(to, subject, text, reply_to='jan.duplessis@nhs.net', from_email='
 def get_agenda(database_id: str, subject: str = "Meeting Agenda"):
     """
     Generic function to get agenda from any database.
-    
+
     Args:
         database_id: The Notion database ID to fetch from
         subject: The email subject line
-        
+
     Returns:
         Tuple of (subject, html_body)
     """
@@ -80,7 +81,7 @@ def get_team_agenda(subject: str = "Team Meeting Agenda"):
 def run_agenda(database_id: str, date_of_meeting: str, email_list: list, preview_agenda: bool = False, meeting_type: str = "Meeting"):
     """
     Generic function to run agenda generation and email sending.
-    
+
     Args:
         database_id: The Notion database ID to fetch from
         date_of_meeting: Date string for the meeting
@@ -92,17 +93,21 @@ def run_agenda(database_id: str, date_of_meeting: str, email_list: list, preview
         subject, body = get_agenda(database_id, subject=f"{meeting_type} Agenda - {date_of_meeting}")
         if preview_agenda:
             expander_text = "HTML Email Preview"
+            expander_status = True
         else:
             expander_text = "HTML Email Preview + Send Email"
-        with st.expander(expander_text, icon=":material/html:"):
+            expander_status = False
+
+        with st.expander(expander_text, icon=":material/html:", expanded=expander_status):
             st.html(body)
-            
+
         if preview_agenda == False:
             try:
                 for mail in email_list:
                     email_return = send_email(mail, subject, body)
                     st.success(f":material/done_outline: `{email_return}`  \nTo: `{mail}`  \nSubject: `{subject}`")
-    
+                    time.sleep(1)  # Sleep to avoid hitting rate limits
+
             except requests.exceptions.RequestException as e:
                 st.error(f"Failed to send email: {e}")
                 return None
@@ -121,22 +126,22 @@ def run_team_agenda(date_of_meeting: str, email_list: list, preview_agenda: bool
 def get_github_trending_page():
     """
     Fetch trending Python repositories from GitHub and add them to Notion database.
-    
+
     Returns:
         int: Number of repositories processed
     """
     import gtrending
     from datetime import datetime
-    
+
     # Fetch trending python repositories for the day
     repos = gtrending.fetch_repos(language="python", spoken_language_code="en", since="daily")
-    
+
     processed_count = 0
     for repo in repos[:20]:
         owner = repo['fullname'].split('/')[0]
         # Reliable way to get the icon (GitHub redirects this to the real image)
         icon_url = f"https://github.com/{owner}.png"
-        
+
         print(f"Stars today: +{repo['currentPeriodStars']}")
         print(f"Total Stars: {repo['stars']}")
         print(f"URL: {repo['url']}")
@@ -184,14 +189,14 @@ def get_github_trending_page():
         nh.new_page_to_data_source('2f4fdfd6-8a97-805b-a6e9-000b8149b31f', page_properties=properties)
         print("✅")
         processed_count += 1
-    
+
     return processed_count
 
 
 def delete_duplicate_pages():
     """
     Find and delete duplicate repository entries in the Notion database.
-    
+
     Returns:
         list: List of page IDs that were deleted
     """
@@ -205,29 +210,29 @@ def delete_duplicate_pages():
 def run_github_trending_workflow():
     """
     Complete workflow: Fetch trending GitHub repos and clean up duplicates.
-    
+
     Returns:
         tuple: (repos_added, duplicates_removed)
     """
-    print("🚀 Starting GitHub Trending workflow...")
-    
+    st.toast("Getting Trending GitHub repos...", icon=":material/favorite:", duration='long')
+
     # Step 1: Fetch and add trending repos
     repos_added = get_github_trending_page()
     print(f"\n✅ Added {repos_added} repositories")
-    
+
     # Step 2: Remove duplicates
-    print("\n🔍 Loading DataFrame and checking for duplicates...")
+    st.toast("Cleaning up duplicates...", icon=":material/mop:", duration='long')
     duplicate_ids = delete_duplicate_pages()
-    
+
     duplicates_removed = 0
     for dup in duplicate_ids:
-        outcome = nh.move_page_to_trash(dup)
-        print(f"❌ Moved to trash - page_id: {dup}")
+        outcome = nh.trash_page(dup)
+        st.toast(f"Trashed ID: {dup}", icon=":material/delete:", duration='short')
         duplicates_removed += 1
-    
+
     print(f"\n✅ Removed {duplicates_removed} duplicate entries")
     print("🎉 GitHub Trending workflow completed!")
-    
+
     return repos_added, duplicates_removed
 
 
