@@ -326,6 +326,12 @@ def append_blocks_in_batches(page_id: str, blocks: list) -> dict:
     return result
 
 
+def build_notion_page_url(page_id: str) -> str:
+    """Build a direct Notion page URL from a page ID."""
+    compact_id = page_id.replace("-", "")
+    return f"https://www.notion.so/{compact_id}"
+
+
 def create_new_page(
     title: str,
     desc: str,
@@ -358,7 +364,12 @@ def create_new_page(
         'URL': {'url': url if url else None}
     }
     
-    result = nh.new_page_to_data_source(database_id, page_properties=properties)
+    created_page = nh.new_page_to_data_source(database_id, page_properties=properties)
+    page_id = created_page.get("id")
+    if not page_id:
+        raise ValueError("Notion did not return a page id for the newly created page.")
+
+    append_result = None
     
     if markdown_body:
         blocks = Blockizer().convert(markdown_body)
@@ -366,13 +377,14 @@ def create_new_page(
         blocks = filter_valid_blocks(blocks)
         if blocks:
             # Use batching to handle large content (Notion limit is 100 blocks)
-            output = append_blocks_in_batches(result['id'], blocks)
-        else:
-            output = result
-    else:
-        output = result
-    
-    return output
+            append_result = append_blocks_in_batches(page_id, blocks)
+
+    return {
+        "id": page_id,
+        "url": build_notion_page_url(page_id),
+        "page": created_page,
+        "append_result": append_result,
+    }
 
 
 def append_to_existing_page(page_id: str, markdown_body: str) -> dict:
@@ -554,8 +566,19 @@ def _render_create_new_page_form(model: str = "openai/gpt-oss-120b") -> None:
                 # Clear the generated markdown from session state
                 if "generated_markdown" in st.session_state:
                     del st.session_state["generated_markdown"]
-                st.success(f":material/check_circle: Page created successfully!  \n\nPage ID: `{result.get('id', 'N/A')}`")
-                st.rerun()
+                page_id = result.get("id", "N/A")
+                page_url = result.get("url")
+
+                st.success(":material/check_circle: Page created successfully in the default Notion database.")
+                st.markdown(f"**Page ID:** `{page_id}`")
+                if page_url:
+                    st.link_button(
+                        "Open Notion Page",
+                        page_url,
+                        icon=":material/open_in_new:",
+                        type="secondary",
+                        width="content",
+                    )
             except Exception as e:
                 st.error(f":material/error: Failed to create page: {e}")
 
