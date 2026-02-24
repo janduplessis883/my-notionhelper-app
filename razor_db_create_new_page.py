@@ -4,6 +4,7 @@ Streamlit-compatible module for creating Notion pages or appending content.
 import re
 from typing import Optional, Any
 import streamlit as st
+import requests
 from notionhelper import NotionHelper
 from notion_blockify import Blockizer
 from groq import Groq
@@ -70,6 +71,66 @@ def extract_page_id_from_url(notion_url: str) -> Optional[str]:
         return f"{hex_id[:8]}-{hex_id[8:12]}-{hex_id[12:16]}-{hex_id[16:20]}-{hex_id[20:]}"
     
     return None
+
+
+def normalize_notion_id(raw_value: str) -> str:
+    """
+    Normalize a Notion ID from either a raw UUID, 32-char ID, or Notion URL.
+
+    Args:
+        raw_value: A Notion UUID/ID/URL value
+
+    Returns:
+        A UUID-formatted Notion ID when possible
+    """
+    value = (raw_value or "").strip()
+    if not value:
+        return value
+
+    extracted = extract_page_id_from_url(value)
+    if extracted:
+        return extracted
+
+    compact = value.replace("-", "")
+    if re.fullmatch(r"[a-fA-F0-9]{32}", compact):
+        return f"{compact[:8]}-{compact[8:12]}-{compact[12:16]}-{compact[16:20]}-{compact[20:]}"
+
+    return value
+
+
+def _extract_http_error_details(exc: Exception) -> tuple[Optional[int], str, str]:
+    """Best-effort extraction of status/code/message from requests exceptions."""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None, "", str(exc)
+
+    status = response.status_code
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            return status, str(body.get("code", "")), str(body.get("message", ""))
+    except ValueError:
+        pass
+
+    return status, "", response.text or str(exc)
+
+
+def _create_page_legacy_database(database_id: str, page_properties: dict[str, Any]) -> dict:
+    """
+    Fallback for workspaces still using legacy database parenting.
+    """
+    payload = {
+        "parent": {"database_id": database_id},
+        "properties": page_properties,
+    }
+    headers = {
+        "Authorization": f"Bearer {notion_token}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+    }
+    response = requests.post("https://api.notion.com/v1/pages", headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
 
 
 VALID_BLOCK_TYPES = {
@@ -356,6 +417,7 @@ def create_new_page(
     """
     if not database_id:
         database_id = razor_db_id
+    database_id = normalize_notion_id(database_id)
     
     properties = {
         'Title': {'title': [{'text': {'content': title}}]},
@@ -364,7 +426,26 @@ def create_new_page(
         'URL': {'url': url if url else None}
     }
     
-    created_page = nh.new_page_to_data_source(database_id, page_properties=properties)
+    try:
+        created_page = nh.new_page_to_data_source(database_id, page_properties=properties)
+    except requests.exceptions.HTTPError as primary_err:
+        status, code, message = _extract_http_error_details(primary_err)
+        is_parent_lookup_issue = status == 404 and code == "object_not_found"
+
+        if is_parent_lookup_issue:
+            try:
+                created_page = _create_page_legacy_database(database_id, properties)
+            except requests.exceptions.HTTPError as fallback_err:
+                _, _, fallback_message = _extract_http_error_details(fallback_err)
+                if not fallback_message:
+                    fallback_message = message
+                raise ValueError(
+                    "Notion could not find or access the destination data source/database. "
+                    "Confirm the ID in RAZOR_DB_ID is correct and that your integration has access to it. "
+                    f"Notion message: {fallback_message}"
+                ) from fallback_err
+        else:
+            raise
     page_id = created_page.get("id")
     if not page_id:
         raise ValueError("Notion did not return a page id for the newly created page.")
