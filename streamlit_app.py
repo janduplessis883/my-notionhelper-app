@@ -26,7 +26,7 @@ if "authenticated" not in st.session_state:
 # If not authenticated, show passcode entry
 if not st.session_state.authenticated:
     st.header(":material/lock: Access Required")
-    st.markdown("Please enter the passcode to access the application.")
+    st.markdown(":shimmer[Please enter the passcode to access the application.]")
 
     passcode_input = st.text_input("Passcode", type="password", key="passcode_input")
 
