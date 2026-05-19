@@ -28,7 +28,7 @@ if not st.session_state.authenticated:
     st.header(":material/lock: Access Required")
     st.markdown(":shimmer[Please enter the passcode to access the application.]")
 
-    passcode_input = st.text_input("Passcode", type="password", key="passcode_input")
+    passcode_input = st.text_input("", type="password", key="passcode_input", icon=":material/key:", placeholder="Enter passcode here", label_visibility="collapsed")
 
     if st.button("Submit", type="primary"):
         if passcode_input == st.secrets["passcode"]:
