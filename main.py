@@ -239,7 +239,7 @@ def run_github_trending_workflow():
 def show_tasks():
     tasks = nh.get_data_source_pages_as_dataframe(tasks_db_id, utc=True)
     f_tasks = tasks[['Date','Status','Priority','Task','Formula', 'notion_page_id']].copy()
-    f_tasks['Date'] = pd.to_datetime(f_tasks['Date'], format='ISO8601')
+    f_tasks['Date'] = pd.to_datetime(f_tasks['Date'], format='ISO8601', utc=True, errors='coerce')
     not_done = f_tasks[f_tasks['Status'] != 'Done']
     llm_format = not_done.to_dict('records')
     return llm_format
