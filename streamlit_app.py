@@ -29,6 +29,17 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     st.header(":material/lock: Access Required")
     st.markdown(":shimmer[Please enter the passcode to access the application.]")
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stForm"] {
+            border: 0;
+            padding: 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.form("access_required_form"):
         passcode_input = st.text_input("", type="password", key="passcode_input", icon=":material/key:", placeholder="Enter passcode here", label_visibility="collapsed")
