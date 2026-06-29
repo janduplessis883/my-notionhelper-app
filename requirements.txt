@@ -7,3 +7,5 @@ seaborn
 resend
 groq
 gtrending
+requests
+loguru

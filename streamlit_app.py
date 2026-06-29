@@ -7,7 +7,9 @@ from datetime import date, datetime, timedelta
 import html
 
 from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda, run_github_trending_workflow, show_tasks
+from notion_interviews import render_notion_interview_database
 from razor_db_create_new_page import render_notion_page_creator
+from weather_forecast import DEFAULT_WEATHER_DATABASE_ID, run_forecast
 
 # Initialize Groq client
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -100,7 +102,7 @@ def save_task_summary_to_notion(summary_markdown: str, summary_title: str) -> st
 
 with st.sidebar:
     st.title(":material/settings: Settings")
-    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Write to URL"]
+    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Notion Interview Database", "Write to URL"]
     pages = st.selectbox("Page Selectioon", PAGE_SELECTION, index=0)
     st.divider()
     MODEL_OPTIONS = ["moonshotai/kimi-k2-instruct-0905", "meta-llama/llama-4-maverick-17b-128e-instruct", "qwen/qwen3-32b", "openai/gpt-oss-120b", "groq/compound-mini", "groq/compound"]
@@ -276,8 +278,12 @@ elif pages == "Calendar":
         st.html("".join(cards))
 
 
-elif pages == "HR":
+elif pages == "Human Resources":
     st.caption("HR")
+
+
+elif pages == "Notion Interview Database":
+    render_notion_interview_database(nh)
 
 
 elif pages == "Write to URL":
@@ -286,6 +292,9 @@ elif pages == "Write to URL":
 
 elif pages == "Python Script Runner":
     st.caption("Python-script-runner")
+    if "weather_forecast_result" not in st.session_state:
+        st.session_state.weather_forecast_result = None
+
     c1, c2 = st.columns(2)
     with c1:
         trending_github = st.button("Trending GitHub Repos", icon=":material/deployed_code:", width='stretch')
@@ -301,3 +310,24 @@ elif pages == "Python Script Runner":
                     st.error(f":material/error: Error running GitHub trending workflow: {e}")
     with c2:
         st.link_button("Notion Github Repos", "https://www.notion.so/janduplessis/2f4fdfd68a9780a1a74fd03b7008ed99?v=2f4fdfd68a9780cbad38000c27fcd66a&source=copy_link", type='secondary', width='stretch', icon=':material/link:')
+
+    c3, c4 = st.columns(2)
+    with c3:
+        run_weather = st.button("Run Weather Forecast", icon=":material/cloud:", width='stretch')
+        if run_weather:
+            with st.spinner("Creating London weather forecast...", show_time=True):
+                try:
+                    weather_database_id = st.secrets.get("NOTION_WEATHER_DATABASE_ID", DEFAULT_WEATHER_DATABASE_ID)
+                    forecast = run_forecast(st.secrets["NOTION_TOKEN"], weather_database_id)
+                    st.session_state.weather_forecast_result = forecast
+                except Exception as e:
+                    st.error(f":material/error: Error running weather forecast workflow: {e}")
+    with c4:
+        st.link_button("Open NotionOS", "https://app.notion.com/p/janduplessis/NotionOS-a5a7fa49036a430ba5fbc088016958bb?source=copy_link", type='secondary', width='stretch', icon=':material/link:')
+
+    forecast = st.session_state.weather_forecast_result
+    if forecast:
+        st.success(f":material/check_circle: Forecast saved to Notion page `{forecast['page_id']}`")
+        st.info(f"Processed {forecast['rows']} hourly forecast rows.")
+        st.image(str(forecast["temperature_path"]), caption="7-Day Forecast London - Temp & Rain", width='stretch')
+        st.image(str(forecast["cloud_path"]), caption="7-Day Forecast London - Cloud Cover", width='stretch')
