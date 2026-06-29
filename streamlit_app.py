@@ -8,6 +8,7 @@ import html
 
 from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda, run_github_trending_workflow, show_tasks
 from notion_interviews import render_notion_interview_database
+from pdf_to_png import render_pdf_to_png
 from razor_db_create_new_page import render_notion_page_creator
 from weather_forecast import DEFAULT_WEATHER_DATABASE_ID, run_forecast
 
@@ -115,7 +116,7 @@ def save_task_summary_to_notion(summary_markdown: str, summary_title: str) -> st
 
 with st.sidebar:
     st.title(":material/settings: Settings")
-    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Notion Interview Database", "Write to URL"]
+    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Notion Interview Database", "Write to URL", "PDF to PNG"]
     pages = st.selectbox("Page Selectioon", PAGE_SELECTION, index=0)
     st.divider()
     MODEL_OPTIONS = ["moonshotai/kimi-k2-instruct-0905", "meta-llama/llama-4-maverick-17b-128e-instruct", "qwen/qwen3-32b", "openai/gpt-oss-120b", "groq/compound-mini", "groq/compound"]
@@ -301,6 +302,10 @@ elif pages == "Notion Interview Database":
 
 elif pages == "Write to URL":
     render_notion_page_creator(model=model)
+
+
+elif pages == "PDF to PNG":
+    render_pdf_to_png(nh)
 
 
 elif pages == "Python Script Runner":
