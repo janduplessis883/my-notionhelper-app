@@ -10,3 +10,4 @@ gtrending
 requests
 loguru
 pymupdf
+openai

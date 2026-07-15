@@ -43,7 +43,7 @@ if not st.session_state.authenticated:
     )
 
     with st.form("access_required_form"):
-        passcode_input = st.text_input("", type="password", key="passcode_input", icon=":material/key:", placeholder="Enter passcode here", label_visibility="collapsed")
+        passcode_input = st.text_input("Passcode", type="password", key="passcode_input", icon=":material/key:", placeholder="Enter passcode here", label_visibility="collapsed")
         submitted = st.form_submit_button("Submit", type="primary")
 
     if submitted:
