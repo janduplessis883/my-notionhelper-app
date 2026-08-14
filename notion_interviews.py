@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 import re
 
@@ -49,6 +50,18 @@ BASE_DATABASE_PROPERTIES = {
 NOTION_API_BASE = "https://api.notion.com/v1"
 SUMMARY_PROPERTY = "Candidate Summary"
 LLM_SCORE_PROPERTY = "LLM Score"
+EMAIL_PATTERN = re.compile(r"[\w.!#$%&'*+/=?^_`{|}~-]+@[\w.-]+\.[A-Za-z]{2,}")
+PHONE_PATTERN = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
+APPLICATION_REFERENCE_PATTERN = re.compile(r"\bAR-\d{6}-\d+\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class CandidateContact:
+    application_reference: str
+    first_name: str
+    surname: str
+    phone: str = ""
+    email: str = ""
 
 
 def normalise_number_field_name(field_name: str) -> str:
@@ -116,15 +129,30 @@ def create_notion_database(
     return response["data_sources"][0]["id"]
 
 
+def clean_text_value(value) -> str:
+    if pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if text.casefold() == "nan":
+        return ""
+    return text
+
+
 def build_properties(row) -> dict:
     """Convert one CSV row into Notion page properties."""
+
+    application_reference = clean_text_value(row.Application_reference)
+    first_name = clean_text_value(row.First_name)
+    surname = clean_text_value(row.Surname)
+    phone = clean_text_value(row.Phone) or None
+    email = clean_text_value(row.Email) or None
 
     return {
         "Application Reference": {
             "title": [
                 {
                     "text": {
-                        "content": str(row.Application_reference)
+                        "content": application_reference
                     }
                 }
             ]
@@ -133,7 +161,7 @@ def build_properties(row) -> dict:
             "rich_text": [
                 {
                     "text": {
-                        "content": str(row.First_name)
+                        "content": first_name
                     }
                 }
             ]
@@ -142,18 +170,139 @@ def build_properties(row) -> dict:
             "rich_text": [
                 {
                     "text": {
-                        "content": str(row.Surname)
+                        "content": surname
                     }
                 }
             ]
         },
         "Phone": {
-            "phone_number": str(row.Phone)
+            "phone_number": phone
         },
         "Email": {
-            "email": str(row.Email)
+            "email": email
         },
     }
+
+
+def split_full_name(full_name: str) -> tuple[str, str]:
+    name_parts = [part for part in full_name.strip().split() if part]
+    if not name_parts:
+        return "", ""
+    if len(name_parts) == 1:
+        return name_parts[0], ""
+    return name_parts[0], " ".join(name_parts[1:])
+
+
+def normalize_phone(value: str) -> str:
+    phone = " ".join(value.split())
+    return phone.strip(" ,;:")
+
+
+def extract_contact_from_index_chunk(reference: str, chunk: str) -> CandidateContact | None:
+    lines = [
+        line.strip()
+        for line in chunk.splitlines()
+        if line.strip()
+    ]
+    email_match = EMAIL_PATTERN.search(chunk)
+    phone_match = PHONE_PATTERN.search(chunk)
+    email = email_match.group(0) if email_match else ""
+    phone = normalize_phone(phone_match.group(0)) if phone_match else ""
+
+    name_lines = []
+    for line in lines:
+        if APPLICATION_REFERENCE_PATTERN.fullmatch(line):
+            continue
+        if EMAIL_PATTERN.search(line):
+            continue
+        if PHONE_PATTERN.fullmatch(line):
+            continue
+        name_lines.append(line)
+
+    full_name = " ".join(name_lines).strip()
+    if not full_name:
+        return None
+
+    first_name, surname = split_full_name(full_name)
+    return CandidateContact(
+        application_reference=reference.upper(),
+        first_name=first_name,
+        surname=surname,
+        phone=phone,
+        email=email,
+    )
+
+
+def extract_candidate_contacts_from_index(text: str) -> dict[str, CandidateContact]:
+    index_text = re.split(
+        r"^\s*Academic Qualifications\s*$",
+        text,
+        maxsplit=1,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )[0]
+    references = list(APPLICATION_REFERENCE_PATTERN.finditer(index_text))
+    contacts: dict[str, CandidateContact] = {}
+
+    for index, match in enumerate(references):
+        next_start = references[index + 1].start() if index + 1 < len(references) else len(index_text)
+        chunk = index_text[match.end() : next_start]
+        contact = extract_contact_from_index_chunk(match.group(0), chunk)
+        if contact:
+            contacts[contact.application_reference] = contact
+
+    return contacts
+
+
+def extract_candidate_contact_from_record(
+    candidate: CandidateRecord,
+    indexed_contacts: dict[str, CandidateContact],
+) -> CandidateContact:
+    indexed_contact = indexed_contacts.get(candidate.reference.upper())
+    first_name, surname = split_full_name(candidate.name)
+    email_match = EMAIL_PATTERN.search(candidate.text)
+
+    if indexed_contact:
+        return CandidateContact(
+            application_reference=candidate.reference,
+            first_name=indexed_contact.first_name or first_name,
+            surname=indexed_contact.surname or surname,
+            phone=indexed_contact.phone,
+            email=indexed_contact.email or (email_match.group(0) if email_match else ""),
+        )
+
+    return CandidateContact(
+        application_reference=candidate.reference,
+        first_name=first_name,
+        surname=surname,
+        email=email_match.group(0) if email_match else "",
+    )
+
+
+def candidate_contacts_to_dataframe(contacts: list[CandidateContact]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Application_reference": contact.application_reference,
+                "First_name": contact.first_name,
+                "Surname": contact.surname,
+                "Phone": contact.phone,
+                "Email": contact.email,
+            }
+            for contact in contacts
+        ]
+    )
+
+
+def extract_candidate_contacts_from_pdf_text(
+    pdf_text: str,
+    candidates: list[CandidateRecord],
+) -> pd.DataFrame:
+    indexed_contacts = extract_candidate_contacts_from_index(pdf_text)
+    contacts = [
+        extract_candidate_contact_from_record(candidate, indexed_contacts)
+        for candidate in candidates
+    ]
+    return candidate_contacts_to_dataframe(contacts)
 
 
 def normalise_contact_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -505,22 +654,6 @@ def render_notion_interview_database(nh: NotionHelper) -> None:
         if "{candidate_text}" not in assessment_prompt:
             st.warning("The prompt must include `{candidate_text}` so the candidate application can be inserted.")
 
-    if uploaded_csv is not None:
-        try:
-            preview_df = load_contact_csv(uploaded_csv)
-            st.dataframe(preview_df.head(20), width="stretch", hide_index=True)
-            st.info(f"Ready to import {len(preview_df)} candidate rows.")
-        except Exception as exc:
-            st.error(f"Could not read CSV: {exc}")
-            preview_df = None
-    elif CSV_PATH.exists():
-        preview_df = load_contact_csv(CSV_PATH)
-        st.info(f"Using default CSV: `{CSV_PATH}` ({len(preview_df)} rows).")
-        st.dataframe(preview_df.head(20), width="stretch", hide_index=True)
-    else:
-        preview_df = None
-        st.warning(f"Upload a CSV to import candidates. Default CSV not found at `{CSV_PATH}`.")
-
     pdf_source = None
     if uploaded_pdf is not None:
         pdf_source = uploaded_pdf
@@ -530,6 +663,30 @@ def render_notion_interview_database(nh: NotionHelper) -> None:
         st.info(f"Using default PDF: `{PDF_PATH}`.")
     else:
         st.warning(f"Upload a PDF to summarize candidates. Default PDF not found at `{PDF_PATH}`.")
+
+    preview_df = None
+    contact_source = ""
+    if uploaded_csv is not None:
+        try:
+            preview_df = load_contact_csv(uploaded_csv)
+            contact_source = "CSV"
+            st.dataframe(preview_df.head(20), width="stretch", hide_index=True)
+            st.info(f"Ready to import {len(preview_df)} candidate rows from the CSV.")
+        except Exception as exc:
+            st.error(f"Could not read CSV: {exc}")
+    elif pdf_source is not None:
+        contact_source = "PDF"
+        st.info(
+            "No contact CSV selected. Candidate reference, name, phone and email "
+            "will be extracted from the PDF before scoring starts."
+        )
+    elif CSV_PATH.exists():
+        preview_df = load_contact_csv(CSV_PATH)
+        contact_source = "default CSV"
+        st.info(f"Using default CSV: `{CSV_PATH}` ({len(preview_df)} rows).")
+        st.dataframe(preview_df.head(20), width="stretch", hide_index=True)
+    else:
+        st.warning("Upload a PDF or CSV to import candidates.")
 
     create_database = st.button(
         "Create Interview Database",
@@ -549,6 +706,38 @@ def render_notion_interview_database(nh: NotionHelper) -> None:
         return
 
     try:
+        candidates: list[CandidateRecord] = []
+        contact_df = preview_df
+
+        if pdf_source is not None:
+            with st.spinner("Extracting and splitting candidate PDF...", show_time=True):
+                pdf_text = extract_pdf_text(pdf_source)
+                candidates = split_candidate_records(pdf_text)
+
+            if not candidates:
+                raise ValueError("No candidate records were found in the PDF.")
+
+            st.success(f"Extracted {len(candidates)} candidate records from the PDF.")
+
+            if contact_df is None:
+                contact_df = extract_candidate_contacts_from_pdf_text(pdf_text, candidates)
+                contact_source = "PDF"
+                if contact_df.empty:
+                    raise ValueError("Could not extract candidate contact rows from the PDF.")
+
+                st.dataframe(contact_df.head(20), width="stretch", hide_index=True)
+                missing_contacts = contact_df[
+                    (contact_df["Phone"].fillna("").str.strip() == "")
+                    | (contact_df["Email"].fillna("").str.strip() == "")
+                ]
+                if missing_contacts.empty:
+                    st.success(f"Extracted {len(contact_df)} candidate contact rows from the PDF.")
+                else:
+                    st.warning(
+                        f"Extracted {len(contact_df)} candidate contact rows from the PDF; "
+                        f"{len(missing_contacts)} row(s) are missing phone or email details."
+                    )
+
         parent_page_id = nh.extract_page_id_from_url(parent_page_url)
         data_source_id = create_notion_database(
             nh,
@@ -558,16 +747,11 @@ def render_notion_interview_database(nh: NotionHelper) -> None:
         )
         st.success(f"Created Notion data source: `{data_source_id}`")
 
-        if preview_df is not None:
-            imported_count = process_dataframe(nh, data_source_id, preview_df)
-            st.success(f"Imported {imported_count} candidates.")
+        if contact_df is not None:
+            imported_count = process_dataframe(nh, data_source_id, contact_df)
+            st.success(f"Imported {imported_count} candidates from {contact_source}.")
 
-            if pdf_source is not None:
-                with st.spinner("Extracting and splitting candidate PDF...", show_time=True):
-                    pdf_text = extract_pdf_text(pdf_source)
-                    candidates = split_candidate_records(pdf_text)
-
-                st.success(f"Extracted {len(candidates)} candidate records from the PDF.")
+            if candidates:
                 progress_bar = st.progress(0, text="Starting local LLM summarization...")
                 llm_settings = LocalLLMSettings(
                     base_url=llm_base_url.strip() or DEFAULT_BASE_URL,
