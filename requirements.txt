@@ -13,3 +13,4 @@ pymupdf
 openai
 pypdf
 streamlit-shadcn-ui
+marker-pdf
