@@ -5,6 +5,10 @@ import streamlit as st
 from groq import Groq
 from datetime import date, datetime, timedelta
 import html
+import os
+from pathlib import Path
+import subprocess
+import sys
 import time
 
 from main import get_partners_agenda, send_email, run_partners_agenda, run_team_agenda, run_github_trending_workflow, show_tasks
@@ -357,6 +361,31 @@ elif pages == "Python Script Runner":
                     st.error(f":material/error: Error running weather forecast workflow: {e}")
     with c4:
         ui.link_button("Open NotionOS", "https://app.notion.com/p/janduplessis/NotionOS-a5a7fa49036a430ba5fbc088016958bb?source=copy_link", variant='outline', width='stretch')
+
+    if st.button("Agenda Projects with Jev", width="stretch"):
+        typesafe_api_key = st.secrets.get("TYPESAFE_API_KEY")
+        if not typesafe_api_key:
+            st.error("TYPESAFE_API_KEY is missing from Streamlit secrets.")
+        else:
+            with st.spinner("Classifying agenda items with Jev...", show_time=True):
+                env = os.environ.copy()
+                env["NOTION_TOKEN"] = st.secrets["NOTION_TOKEN"]
+                env["TYPESAFE_API_KEY"] = typesafe_api_key
+                result = subprocess.run(
+                    [sys.executable, str(Path(__file__).with_name("agenda_projects_jev.py"))],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            if result.returncode == 0:
+                st.success("Agenda projects classified successfully.")
+            else:
+                st.error("Agenda project classification failed.")
+            if result.stdout:
+                st.code(result.stdout, language="text")
+            if result.stderr:
+                st.code(result.stderr, language="text")
 
 
     forecast = st.session_state.weather_forecast_result
