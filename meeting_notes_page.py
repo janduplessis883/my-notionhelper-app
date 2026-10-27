@@ -1,6 +1,7 @@
 """Streamlit page for generating structured meeting notes."""
 
 from dataclasses import dataclass
+import hashlib
 import re
 from typing import Callable
 
@@ -29,6 +30,15 @@ def build_meeting_llm_config(api_key: str) -> LLMConfig:
 def _download_filename(title: str) -> str:
     stem = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
     return f"{stem or 'meeting_notes'}.md"
+
+
+def upload_identity(filename: str, payload: bytes) -> str:
+    """Return a stable identity that changes when the selected upload changes."""
+    digest = hashlib.sha256()
+    digest.update(filename.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(payload)
+    return digest.hexdigest()
 
 
 def process_meeting_upload(
@@ -110,6 +120,19 @@ def render_meeting_notes_page(
         help="WebVTT timestamps and speaker labels are retained.",
         key="meeting_notes_upload",
     )
+
+    if uploaded is None:
+        if "meeting_notes_upload_identity" in st.session_state:
+            st.session_state.pop("meeting_notes_upload_identity", None)
+            st.session_state.pop("meeting_notes_markdown", None)
+            st.session_state.pop("meeting_notes_download_filename", None)
+    else:
+        current_upload_identity = upload_identity(uploaded.name, uploaded.getvalue())
+        previous_upload_identity = st.session_state.get("meeting_notes_upload_identity")
+        if previous_upload_identity and previous_upload_identity != current_upload_identity:
+            st.session_state.pop("meeting_notes_markdown", None)
+            st.session_state.pop("meeting_notes_download_filename", None)
+        st.session_state["meeting_notes_upload_identity"] = current_upload_identity
 
     preview_error = None
     if uploaded is not None:

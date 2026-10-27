@@ -16,6 +16,12 @@ class FakeCompletions:
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
+class EmptyChoicesCompletions(FakeCompletions):
+    def create(self, **kwargs):
+        self.requests.append(kwargs)
+        return SimpleNamespace(choices=[])
+
+
 def fake_client(content):
     completions = FakeCompletions(content)
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
@@ -78,6 +84,15 @@ def test_complete_chat_omits_absent_system_message():
 def test_complete_chat_rejects_empty_response(content):
     config = build_llm_config("FreeLLM", "secret")
     client, _ = fake_client(content)
+
+    with pytest.raises(RuntimeError, match="empty response"):
+        complete_chat(config, "Prompt", client=client)
+
+
+def test_complete_chat_rejects_response_without_choices():
+    config = build_llm_config("FreeLLM", "secret")
+    completions = EmptyChoicesCompletions(None)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     with pytest.raises(RuntimeError, match="empty response"):
         complete_chat(config, "Prompt", client=client)

@@ -74,7 +74,11 @@ def complete_chat(
     messages.append({"role": "user", "content": prompt})
 
     response = client.chat.completions.create(model=config.model, messages=messages)
-    content = response.choices[0].message.content
+    choices = getattr(response, "choices", None)
+    if not choices:
+        raise RuntimeError(f"{config.provider} returned an empty response.")
+    message = getattr(choices[0], "message", None)
+    content = getattr(message, "content", None)
     if not content or not content.strip():
         raise RuntimeError(f"{config.provider} returned an empty response.")
     return content.strip()

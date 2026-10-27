@@ -156,3 +156,15 @@ def test_meeting_notes_page_append_batches_blocks_in_hundreds():
     assert page_id == "01234567-89ab-cdef-0123-456789abcdef"
     assert [len(blocks) for _, blocks in notion.calls] == [100, 100, 5]
     assert {call_page_id for call_page_id, _ in notion.calls} == {page_id}
+
+
+def test_meeting_notes_page_upload_identity_changes_with_file_content():
+    from meeting_notes_page import upload_identity
+
+    first = upload_identity("meeting.txt", b"Sarah: First meeting")
+    renamed = upload_identity("renamed.txt", b"Sarah: First meeting")
+    changed = upload_identity("meeting.txt", b"Sarah: Different meeting")
+
+    assert first != renamed
+    assert first != changed
+    assert first == upload_identity("meeting.txt", b"Sarah: First meeting")
