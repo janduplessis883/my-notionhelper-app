@@ -38,6 +38,24 @@ def build_llm_config(provider: str, api_key: str, model: str | None = None) -> L
     raise ValueError(f"Unsupported AI provider: {provider}")
 
 
+def select_llm_config(
+    provider: str,
+    groq_api_key: str,
+    freellm_api_key: str,
+    groq_model: str | None = None,
+) -> LLMConfig:
+    """Select the matching secret and model for a sidebar provider choice."""
+    if provider == GROQ:
+        if not groq_api_key:
+            raise ValueError("GROQ_API_KEY is missing from Streamlit secrets.")
+        return build_llm_config(GROQ, groq_api_key, groq_model)
+    if provider == FREELLM:
+        if not freellm_api_key:
+            raise ValueError("FREELLMAPI_API_KEY is missing from Streamlit secrets.")
+        return build_llm_config(FREELLM, freellm_api_key)
+    raise ValueError(f"Unsupported AI provider: {provider}")
+
+
 def complete_chat(
     config: LLMConfig,
     prompt: str,

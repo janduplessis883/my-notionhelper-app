@@ -2,7 +2,6 @@ import pandas as pd
 from notionhelper import NotionHelper
 from notion_blockify import Blockizer
 import streamlit as st
-from groq import Groq
 from datetime import date, datetime, timedelta
 import html
 import os
@@ -16,11 +15,11 @@ from notion_interviews import render_notion_interview_database
 from pdf_manipulation import render_pdf_manipulation
 from pdf_to_png import render_pdf_to_png
 from marker_pdf_to_markdown import render_marker_pdf_to_markdown
+from llm_client import FREELLM, GROQ, GROQ_MODELS, complete_chat, select_llm_config
+from meeting_notes_page import append_meeting_notes_to_notion, render_meeting_notes_page
 from razor_db_create_new_page import render_notion_page_creator
 from weather_forecast import DEFAULT_WEATHER_DATABASE_ID, run_forecast
 
-# Initialize Groq client
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 nh = NotionHelper(st.secrets["NOTION_TOKEN"])
 
 
@@ -66,24 +65,6 @@ if not st.session_state.authenticated:
 # Main app content (only shown if authenticated)
 st.image("images/notion-logo.png")
 st.logo("images/notion.png", size="medium")
-# Simple function to get a response from Groq
-def ask_groq(prompt: str, model: str = "openai/gpt-oss-120b"):
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-        model=model,
-    )
-    try:
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        st.error(f"Error getting response from Groq: {e}")
-        return "Error: Could not get a response from Groq."
-
-
 def save_task_summary_to_notion(summary_markdown: str, summary_title: str) -> str:
     now_iso = datetime.now().astimezone().isoformat(timespec="minutes")
     title_datetime = datetime.now().astimezone().strftime("%d %b %Y %H:%M")
@@ -123,11 +104,26 @@ def save_task_summary_to_notion(summary_markdown: str, summary_title: str) -> st
 
 with st.sidebar:
     st.title(":material/settings: Settings")
-    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Notion Interview Database", "Write to URL", "PDF to PNG", "PDF Manipulation", "Marker, PDF to Markdown"]
+    PAGE_SELECTION = ["Python Script Runner", "Partners' Agenda", "Team Agenda", "Tasks", "Calendar", "Human Resources", "Notion Interview Database", "Write to URL", "Meeting Notes Agent", "PDF to PNG", "PDF Manipulation", "Marker, PDF to Markdown"]
     pages = st.selectbox("Page Selection", PAGE_SELECTION, index=0)
     st.divider()
-    MODEL_OPTIONS = ["moonshotai/kimi-k2-instruct-0905", "meta-llama/llama-4-maverick-17b-128e-instruct", "qwen/qwen3-32b", "openai/gpt-oss-120b", "groq/compound-mini", "groq/compound"]
-    model = st.selectbox("Model Selection", MODEL_OPTIONS, index=3)
+    provider = st.selectbox("AI provider", [GROQ, FREELLM], index=0)
+    if provider == GROQ:
+        model = st.selectbox("Model", GROQ_MODELS, index=3)
+    else:
+        model = "auto"
+        st.caption("Model: `auto`")
+
+    try:
+        selected_llm_config = select_llm_config(
+            provider,
+            groq_api_key=st.secrets.get("GROQ_API_KEY", ""),
+            freellm_api_key=st.secrets.get("FREELLMAPI_API_KEY", ""),
+            groq_model=model,
+        )
+    except ValueError as exc:
+        selected_llm_config = None
+        st.error(str(exc))
     st.space(size=80)
     st.markdown("`janduplessis883`", text_alignment="center")
 
@@ -211,7 +207,10 @@ elif pages == "Tasks":
         st.stop()
 
     with st.spinner("LLM doing it's thing...", show_time=True):
-        response = ask_groq(prompt)
+        if selected_llm_config is None:
+            st.error("Configure the selected AI provider before generating a summary.")
+            st.stop()
+        response = complete_chat(selected_llm_config, prompt)
         with st.expander("LLM Response", icon=":material/robot_2:", expanded=True):
             st.markdown(response)
         with st.expander("Raw markdown code", icon=":material/code:", expanded=False):
@@ -308,7 +307,21 @@ elif pages == "Notion Interview Database":
 
 
 elif pages == "Write to URL":
-    render_notion_page_creator(model=model)
+    if selected_llm_config is None:
+        st.error("Configure the selected AI provider before generating content.")
+    else:
+        render_notion_page_creator(llm_config=selected_llm_config)
+
+
+elif pages == "Meeting Notes Agent":
+    render_meeting_notes_page(
+        api_key=st.secrets.get("FREELLMAPI_API_KEY", ""),
+        append_to_notion=lambda notion_url, markdown: append_meeting_notes_to_notion(
+            notion_url,
+            markdown,
+            nh,
+        ),
+    )
 
 
 elif pages == "PDF to PNG":

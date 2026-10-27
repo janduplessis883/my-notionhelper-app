@@ -7,32 +7,23 @@ import streamlit as st
 import requests
 from notionhelper import NotionHelper
 from notion_blockify import Blockizer
-from groq import Groq
+
+from llm_client import LLMConfig, complete_chat
 # Authentication from Streamlit secrets
 notion_token = st.secrets["NOTION_TOKEN"]
 razor_db_id = st.secrets["RAZOR_DB_ID"]
-groq_api_key = st.secrets["GROQ_API_KEY"]
 
 # Initialize NotionHelper
 nh = NotionHelper(notion_token)
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Simple function to get a response from Groq
-def ask_groq(prompt: str, model: str = "openai/gpt-oss-120b"):
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-        model=model,
-    )
-    try:
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        st.error(f"Error getting response from Groq: {e}")
-        return "Error: Could not get a response from Groq."
+
+def generate_llm_markdown(
+    llm_config: LLMConfig,
+    prompt: str,
+    completion_fn=complete_chat,
+) -> str:
+    """Generate Markdown using the selected OpenAI-compatible provider."""
+    return completion_fn(llm_config, prompt)
 
 def extract_page_id_from_url(notion_url: str) -> Optional[str]:
     """
@@ -488,52 +479,12 @@ def append_to_existing_page(page_id: str, markdown_body: str) -> dict:
     return append_blocks_in_batches(page_id, blocks)
 
 
-def query_llm(prompt: str, system_prompt: Optional[str] = None) -> str:
-    """
-    Query an LLM (Groq) to generate markdown content.
-
-    Args:
-        prompt: The user prompt
-        system_prompt: Optional system prompt
-
-    Returns:
-        Generated markdown content
-    """
-    import requests
-    import json
-    
-    if system_prompt is None:
-        system_prompt = "You are a helpful assistant. Generate well-formatted markdown content based on the user's request."
-    
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {groq_api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.7,
-        "max_tokens": 4096
-    }
-    
-    response = requests.post(url, headers=headers, json=data)
-    response.raise_for_status()
-    
-    result = response.json()
-    return result["choices"][0]["message"]["content"]
-
-
-def render_notion_page_creator(model: str = "openai/gpt-oss-120b") -> None:
+def render_notion_page_creator(llm_config: LLMConfig) -> None:
     """
     Render the Streamlit UI for creating/appending Notion pages.
 
     Args:
-        model: The LLM model to use for content generation
+        llm_config: The selected provider configuration for content generation.
     """
     st.subheader(":material/note_add: Notion Page Creator")
     
@@ -548,12 +499,12 @@ def render_notion_page_creator(model: str = "openai/gpt-oss-120b") -> None:
     st.divider()
     
     if mode == "Create New Page":
-        _render_create_new_page_form(model=model)
+        _render_create_new_page_form(llm_config=llm_config)
     else:
-        _render_append_to_page_form(model=model)
+        _render_append_to_page_form(llm_config=llm_config)
 
 
-def _render_create_new_page_form(model: str = "openai/gpt-oss-120b") -> None:
+def _render_create_new_page_form(llm_config: LLMConfig) -> None:
     """Render the form for creating a new page."""
     col1, col2 = st.columns(2)
     
@@ -604,7 +555,7 @@ def _render_create_new_page_form(model: str = "openai/gpt-oss-120b") -> None:
             if llm_prompt:
                 with st.spinner("Generating content with LLM...", show_time=True):
                     try:
-                        markdown_body = ask_groq(llm_prompt, model=model)
+                        markdown_body = generate_llm_markdown(llm_config, llm_prompt)
                         st.session_state["generated_markdown"] = markdown_body
                         st.success(":material/check_circle: Content generated!")
                     except Exception as e:
@@ -664,7 +615,7 @@ def _render_create_new_page_form(model: str = "openai/gpt-oss-120b") -> None:
                 st.error(f":material/error: Failed to create page: {e}")
 
 
-def _render_append_to_page_form(model: str = "openai/gpt-oss-120b") -> None:
+def _render_append_to_page_form(llm_config: LLMConfig) -> None:
     """Render the form for appending to an existing page."""
     notion_url = st.text_input(
         "Notion Page URL",
@@ -704,7 +655,7 @@ def _render_append_to_page_form(model: str = "openai/gpt-oss-120b") -> None:
             if llm_prompt:
                 with st.spinner("Generating content with LLM...", show_time=True):
                     try:
-                        markdown_body = ask_groq(llm_prompt, model=model)
+                        markdown_body = generate_llm_markdown(llm_config, llm_prompt)
                         st.session_state["append_generated_markdown"] = markdown_body
                         st.success(":material/check_circle: Content generated!")
                     except Exception as e:
