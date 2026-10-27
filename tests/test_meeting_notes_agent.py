@@ -7,6 +7,7 @@ from meeting_notes_agent import (
     NOTES_PROMPT,
     format_notes,
     generate_meeting_notes,
+    normalize_notion_checkboxes,
     parse_json_response,
 )
 
@@ -84,3 +85,24 @@ def test_format_notes_includes_all_structured_sections():
     assert "## Blockers\n- Payment API documentation" in markdown
     assert "**Next Meeting:** 2026-11-03 10:00" in markdown
     assert "## Follow-up Questions\n- When will PaymentCo respond?" in markdown
+
+
+def test_normalize_notion_checkboxes_removes_leading_list_marker():
+    markdown = """## Action Items
+- [ ] Coordinate with Siamma
+  - [ ] Confirm the meeting time
+- Ordinary bullet
+"""
+
+    assert normalize_notion_checkboxes(markdown) == """## Action Items
+[ ] Coordinate with Siamma
+  [ ] Confirm the meeting time
+- Ordinary bullet
+"""
+
+
+def test_format_notes_uses_notion_checkbox_syntax():
+    markdown = format_notes(NOTES)
+
+    assert "[ ] **Escalate PaymentCo**" in markdown
+    assert "- [ ]" not in markdown

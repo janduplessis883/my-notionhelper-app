@@ -99,6 +99,15 @@ def generate_meeting_notes(
     return parse_json_response(response)
 
 
+def normalize_notion_checkboxes(markdown: str) -> str:
+    """Convert Markdown task-list prefixes to Notion checkbox lines."""
+    return re.sub(
+        r"(?m)^(\s*)-\s+\[\s\]\s+",
+        r"\1[ ] ",
+        markdown,
+    )
+
+
 def format_notes(notes: dict) -> str:
     lines = [
         f"# {notes.get('meeting_title', 'Meeting Notes')}",
@@ -136,7 +145,7 @@ def format_notes(notes: dict) -> str:
             *[f"- {question}" for question in notes["follow_up_questions"]],
         ]
 
-    return "\n".join(lines)
+    return normalize_notion_checkboxes("\n".join(lines))
 
 
 def main():
