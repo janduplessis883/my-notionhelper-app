@@ -82,10 +82,12 @@ def test_meeting_notes_page_processes_upload_and_builds_safe_download():
         b"Sarah: Hello",
         "meeting-secret",
         generation_fn=generate,
+        narrative_generation_fn=lambda transcript, config, notes: "### Context\n- Hello",
     )
 
     assert result.transcript == "Sarah: Hello"
     assert result.markdown.startswith("# Roadmap / Q4 Review!")
+    assert "## Narrative Summary\n### Context\n- Hello\n\n## Summary" in result.markdown
     assert result.download_filename == "roadmap_q4_review.md"
 
 

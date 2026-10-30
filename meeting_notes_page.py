@@ -9,7 +9,11 @@ from notion_blockify import Blockizer
 import streamlit as st
 
 from llm_client import FREELLM, LLMConfig, build_llm_config
-from meeting_notes_agent import format_notes, generate_meeting_notes
+from meeting_notes_agent import (
+    format_notes,
+    generate_meeting_notes,
+    generate_narrative_summary,
+)
 from meeting_transcript import decode_transcript_upload
 
 
@@ -46,6 +50,7 @@ def process_meeting_upload(
     payload: bytes | None,
     api_key: str,
     generation_fn=generate_meeting_notes,
+    narrative_generation_fn: Callable | None = None,
 ) -> GeneratedMeetingNotes:
     """Validate an upload, generate notes, and prepare a download payload."""
     if not filename or payload is None:
@@ -53,6 +58,11 @@ def process_meeting_upload(
     transcript = decode_transcript_upload(filename, payload)
     config = build_meeting_llm_config(api_key)
     notes = generation_fn(transcript, config)
+    if narrative_generation_fn is not None:
+        notes = {
+            **notes,
+            "narrative_summary": narrative_generation_fn(transcript, config, notes),
+        }
     markdown = format_notes(notes)
     return GeneratedMeetingNotes(
         transcript=transcript,
@@ -156,6 +166,7 @@ def render_meeting_notes_page(
                     uploaded.name,
                     uploaded.getvalue(),
                     api_key,
+                    narrative_generation_fn=generate_narrative_summary,
                 )
             st.session_state["meeting_notes_markdown"] = result.markdown
             st.session_state["meeting_notes_download_filename"] = result.download_filename

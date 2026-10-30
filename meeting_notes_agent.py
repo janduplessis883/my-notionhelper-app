@@ -40,6 +40,21 @@ NOTES_PROMPT = """You are a professional meeting note-taker. Convert the meeting
 }
 Return only valid JSON."""
 
+NARRATIVE_SUMMARY_PROMPT = """You are a professional meeting note-taker creating a narrative summary for someone who did not attend the meeting.
+Use the transcript and structured notes to explain the flow of the discussion and the reasoning behind decisions.
+Return a JSON object with exactly one field:
+{
+  "narrative_summary": "Markdown using concise headings (###) and bullet points"
+}
+
+The narrative summary must:
+- provide enough context for a non-attendee to understand what was discussed;
+- connect important concerns, options, evidence, and trade-offs to the decisions made;
+- include the outcome of each important discussion and any unresolved uncertainty;
+- use headings and bullet points, without repeating the short summary, action items, or decisions as a bare list;
+- avoid inventing facts that are not supported by the transcript.
+Return only valid JSON."""
+
 SAMPLE_TRANSCRIPT = """
 Sarah: Alright everyone, let's get started. It's Monday the 3rd and we have John, Mike, and Lisa here.
 
@@ -99,6 +114,29 @@ def generate_meeting_notes(
     return parse_json_response(response)
 
 
+def generate_narrative_summary(
+    transcript: str,
+    config: LLMConfig,
+    notes: dict,
+    completion_fn: Callable[..., str] = complete_chat,
+) -> str:
+    """Generate a contextual Markdown narrative from a transcript and its notes."""
+    if not transcript.strip():
+        raise ValueError("The meeting transcript is empty.")
+    response = completion_fn(
+        config,
+        "Meeting transcript:\n\n"
+        f"{transcript}\n\n"
+        "Structured notes:\n\n"
+        f"{json.dumps(notes, ensure_ascii=False)}",
+        system_prompt=NARRATIVE_SUMMARY_PROMPT,
+    )
+    narrative = parse_json_response(response).get("narrative_summary", "")
+    if not isinstance(narrative, str) or not narrative.strip():
+        raise ValueError("The narrative summary agent did not return any content.")
+    return narrative.strip()
+
+
 def normalize_notion_checkboxes(markdown: str) -> str:
     """Convert Markdown task-list prefixes to Notion checkbox lines."""
     return re.sub(
@@ -114,6 +152,14 @@ def format_notes(notes: dict) -> str:
         f"**Date:** {notes.get('date', date.today().isoformat())}  |  **Duration:** {notes.get('duration_estimate', 'N/A')}",
         f"**Participants:** {', '.join(notes.get('participants', []))}",
         "",
+    ]
+    if notes.get("narrative_summary"):
+        lines += [
+            "## Narrative Summary",
+            notes["narrative_summary"].strip(),
+            "",
+        ]
+    lines += [
         "## Summary",
         notes.get("summary", ""),
         "",
@@ -172,6 +218,7 @@ def main():
         parser.error("FREELLMAPI_API_KEY is required")
     config = build_llm_config(FREELLM, api_key)
     notes = generate_meeting_notes(transcript, config)
+    notes["narrative_summary"] = generate_narrative_summary(transcript, config, notes)
     formatted = format_notes(notes)
 
     print("=" * 60)
